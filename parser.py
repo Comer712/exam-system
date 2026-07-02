@@ -100,9 +100,26 @@ def _extract_answer(text):
     return ''
 
 
+def _extract_inline_options(text):
+    """从题干中提取内联选项（选项和题目在同一行的情况）"""
+    options = []
+    # 匹配 A.xxx B.xxx C.xxx D.xxx 或 A、xxx B、xxx 格式
+    pattern = re.compile(r'([A-E])[\.\s、]+(.+?)(?=[A-E][\.\s、]|$)', re.DOTALL)
+    matches = pattern.findall(text)
+    for label, content in matches:
+        # 清理内容：去掉尾部多余空格和符号
+        content = content.strip().rstrip('；;，,。.').strip()
+        if content and len(content) < 200:  # 合理长度的选项
+            options.append({'label': label, 'text': content})
+    return options
+
+
 def _save(questions, q_text, q_type, chapter, options):
     if q_type not in ('single', 'multiple'):
         return
+    # 如果没有独立的选项行，尝试从题干中提取内联选项
+    if not options:
+        options = _extract_inline_options(q_text)
     answer = _extract_answer(q_text)
     # 去掉答案标记
     clean = re.sub(r'[（(]\s*[A-D✓×√xX对錯错]+\s*[）)]', '（  ）', q_text).strip()
