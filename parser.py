@@ -103,18 +103,17 @@ def _extract_answer(text):
 def _extract_inline_options(text):
     """从题干中提取内联选项（选项和题目在同一行的情况）"""
     options = []
-    # 匹配 A.xxx / A、xxx / A xxx / A直接跟中文 等多种格式
-    # 先尝试标准格式: A. B. C. D. 或 A、 B、 C、 D、
-    for sep in [r'[\.\s、，]+', r'(?=[一-鿿])', r'']:
-        pattern = re.compile(r'([A-E])' + sep + r'(.+?)(?=[A-E](?:[\.\s、，]|[一-鿿])|$)', re.DOTALL)
+    # 第一轮: 标准格式 A.xxx B.xxx 或 A、xxx B、xxx
+    pattern = re.compile(r'([A-E])[\.\s、]+(.+?)(?=[A-E][\.\s、]|$)', re.DOTALL)
+    matches = pattern.findall(text)
+    if not matches:
+        # 第二轮: 无分隔符格式 A促进xxx B促进xxx (字母后直接跟中文)
+        pattern = re.compile(r'([A-E])([^\x00-\x7f].+?)(?=[A-E][^\x00-\x7f]|$)', re.DOTALL)
         matches = pattern.findall(text)
-        if len(matches) >= 2:  # 至少要有2个选项才算有效
-            for label, content in matches:
-                content = re.sub(r'[；;，,。.]\s*$', '', content).strip()
-                if content and len(content) < 200:
-                    options.append({'label': label, 'text': content})
-            if options:
-                return options
+    for label, content in matches:
+        content = re.sub(r'[；;，,。.]\s*$', '', content).strip()
+        if content and len(content) < 200:
+            options.append({'label': label, 'text': content})
     return options
 
 
