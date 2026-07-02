@@ -103,17 +103,41 @@ def _extract_answer(text):
 def _extract_inline_options(text):
     """从题干中提取内联选项（选项和题目在同一行的情况）"""
     options = []
-    # 第一轮: 标准格式 A.xxx B.xxx 或 A、xxx B、xxx
-    pattern = re.compile(r'([A-E])[\.\s、]+(.+?)(?=[A-E][\.\s、]|$)', re.DOTALL)
-    matches = pattern.findall(text)
-    if not matches:
-        # 第二轮: 无分隔符格式 A促进xxx B促进xxx (字母后直接跟中文)
-        pattern = re.compile(r'([A-E])([^\x00-\x7f].+?)(?=[A-E][^\x00-\x7f]|$)', re.DOTALL)
+    # 策略：先找到所有选项标签的位置，然后按位置切分内容
+    label_positions = []
+    for m in re.finditer(r'([A-E])\s*[\.\s、，]?\s*', text):
+        # 判断是否是真正的选项标签（不是出现在单词中的字母）
+        start = m.start()
+        prev_char = text[start-1] if start > 0 else ''
+        # 允许的情况：行首、空格、中文标点、中文字符(选项间无分隔符的情况)
+        is_valid_label = (
+            start == 0
+            or prev_char in ' \t、，。；;）)－-'
+            or ord(prev_char) > 127  # 非ASCII字符(中文等)
+        )
+        if is_valid_label:
+            label_positions.append((start, m.group(1), m.end()))
+
+    if len(label_positions) >= 2:
+        for i, (pos, label, end) in enumerate(label_positions):
+            if i < len(label_positions) - 1:
+                content = text[end:label_positions[i+1][0]]
+            else:
+                content = text[end:]
+            content = re.sub(r'[；;，,。.\s]*$', '', content).strip()
+            if content and len(content) < 200:
+                options.append({'label': label, 'text': content})
+
+    # fallback: 字母+非字母拆分 AxxxBxxxCxxx
+    if len(options) < 2:
+        pattern = re.compile(r'([A-E])([^A-E]+?)(?=[A-E]|$)', re.DOTALL)
         matches = pattern.findall(text)
-    for label, content in matches:
-        content = re.sub(r'[；;，,。.]\s*$', '', content).strip()
-        if content and len(content) < 200:
-            options.append({'label': label, 'text': content})
+        if len(matches) >= 2:
+            options = []
+            for label, content in matches:
+                content = re.sub(r'[；;，,。.\s]*$', '', content).strip()
+                if content and len(content) < 200:
+                    options.append({'label': label, 'text': content})
     return options
 
 
