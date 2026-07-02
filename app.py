@@ -107,8 +107,10 @@ def api_generate():
                         seen.add(key)
                         break
 
+    # 过滤无选项的单选题/多选题
+    selected = [q for q in selected if q['type'] == 'judge' or len(q.get('options', [])) > 0]
     if not selected:
-        return jsonify({'ok': False, 'msg': '未选中任何题目'})
+        return jsonify({'ok': False, 'msg': '未选中任何有效题目（可能题库中的题目缺少选项）'})
 
     output_format = data.get('output', 'word')
     if output_format == 'json':
