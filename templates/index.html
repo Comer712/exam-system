@@ -853,7 +853,19 @@ function importFile() {
 }
 
 function updateChapterUI() {
-  if(!chapterDetail) return;
+  if(!chapterDetail) {
+    // 自动从服务器获取题库信息
+    fetch('/api/bank').then(r => r.json()).then(data => {
+      if(data.ok) {
+        bankStats = data.stats;
+        chapterDetail = data.chapter_detail;
+        updateStatusBar();
+        updateChapterUI();
+      }
+    });
+    document.getElementById('chapterGrid').innerHTML = '<div style="padding:16px;color:var(--ink-secondary);font-size:13px;">正在加载章节数据...</div>';
+    return;
+  }
   let html = '';
   for(const ch in chapterDetail) {
     const d = chapterDetail[ch];
