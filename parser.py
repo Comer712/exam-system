@@ -101,43 +101,34 @@ def _extract_answer(text):
 
 
 def _extract_inline_options(text):
-    """从题干中提取内联选项（选项和题目在同一行的情况）"""
+    """从题干中提取内联选项"""
     options = []
-    # 策略：先找到所有选项标签的位置，然后按位置切分内容
-    label_positions = []
-    for m in re.finditer(r'([A-E])\s*[\.\s、，]?\s*', text):
-        # 判断是否是真正的选项标签（不是出现在单词中的字母）
-        start = m.start()
-        prev_char = text[start-1] if start > 0 else ''
-        # 允许的情况：行首、空格、中文标点、中文字符(选项间无分隔符的情况)
-        is_valid_label = (
-            start == 0
-            or prev_char in ' \t、，。；;）)－-'
-            or ord(prev_char) > 127  # 非ASCII字符(中文等)
-        )
-        if is_valid_label:
-            label_positions.append((start, m.group(1), m.end()))
+    # 方法1: 找 A.xxx 或 A、xxx 或 A xxx 完整模式
+    pattern = re.compile(r'([A-E])\s*[\.\s、，]+\s*(.+?)\s*(?=[A-E]\s*[\.\s、，]|$)', re.DOTALL)
+    for label, content in pattern.findall(text):
+        content = re.sub(r'[；;，,。.]\s*$', '', content).strip()
+        if content and len(content) < 200:
+            options.append({'label': label, 'text': content})
 
-    if len(label_positions) >= 2:
-        for i, (pos, label, end) in enumerate(label_positions):
-            if i < len(label_positions) - 1:
-                content = text[end:label_positions[i+1][0]]
-            else:
-                content = text[end:]
-            content = re.sub(r'[；;，,。.\s]*$', '', content).strip()
+    # 方法2: 如果没找到，尝试 字母+中文 (无分隔符)
+    if len(options) < 2:
+        options = []
+        for m in re.finditer(r'([A-E])([^A-E]+?)(?=[A-E]|$)', text):
+            label, content = m.group(1), m.group(2).strip()
+            content = re.sub(r'[；;，,。.]\s*$', '', content).strip()
             if content and len(content) < 200:
                 options.append({'label': label, 'text': content})
 
-    # fallback: 字母+非字母拆分 AxxxBxxxCxxx
+    # 方法3: 用split暴力切
     if len(options) < 2:
-        pattern = re.compile(r'([A-E])([^A-E]+?)(?=[A-E]|$)', re.DOTALL)
-        matches = pattern.findall(text)
-        if len(matches) >= 2:
-            options = []
-            for label, content in matches:
-                content = re.sub(r'[；;，,。.\s]*$', '', content).strip()
+        options = []
+        parts = re.split(r'\s*(?=[A-E]\s*[\.\s、，])', text)
+        for part in parts:
+            m = re.match(r'([A-E])\s*[\.\s、，]?\s*(.+)', part.strip(), re.DOTALL)
+            if m:
+                content = m.group(2).strip().rstrip('；;，,。.')
                 if content and len(content) < 200:
-                    options.append({'label': label, 'text': content})
+                    options.append({'label': m.group(1), 'text': content})
     return options
 
 
@@ -147,9 +138,20 @@ def _save(questions, q_text, q_type, chapter, options):
     # 如果没有独立的选项行，尝试从题干中提取内联选项
     if not options:
         options = _extract_inline_options(q_text)
+    # 如果选项数仍然不对，直接从题干中暴力提取
+    if len(options) < 2:
+        options = _extract_inline_options(q_text.replace(' ', '  '))  # 双空格确保分界
     answer = _extract_answer(q_text)
-    # 去掉答案标记
+    # 去掉答案标记，同时去掉选项部分（从第一个A标签开始）
     clean = re.sub(r'[（(]\s*[A-D✓×√xX对錯错]+\s*[）)]', '（  ）', q_text).strip()
+    # 如果有内联选项，清理题干中的选项文本
+    if options and len(options) >= 2:
+        first_opt_pos = float('inf')
+        for m in re.finditer(r'\b([A-E])\s*[\.\s、，]', clean):
+            if m.start() < first_opt_pos:
+                first_opt_pos = m.start()
+        if first_opt_pos < float('inf') and first_opt_pos > 10:
+            clean = clean[:first_opt_pos].strip()
     num_match = re.match(r'^(\d+)', clean)
     number = int(num_match.group(1)) if num_match else 0
     clean = re.sub(r'^\d+[\.\s、\)]+', '', clean)
