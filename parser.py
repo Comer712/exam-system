@@ -103,14 +103,18 @@ def _extract_answer(text):
 def _extract_inline_options(text):
     """从题干中提取内联选项（选项和题目在同一行的情况）"""
     options = []
-    # 匹配 A.xxx B.xxx C.xxx D.xxx 或 A、xxx B、xxx 格式
-    pattern = re.compile(r'([A-E])[\.\s、]+(.+?)(?=[A-E][\.\s、]|$)', re.DOTALL)
-    matches = pattern.findall(text)
-    for label, content in matches:
-        # 清理内容：去掉尾部多余空格和符号
-        content = content.strip().rstrip('；;，,。.').strip()
-        if content and len(content) < 200:  # 合理长度的选项
-            options.append({'label': label, 'text': content})
+    # 匹配 A.xxx / A、xxx / A xxx / A直接跟中文 等多种格式
+    # 先尝试标准格式: A. B. C. D. 或 A、 B、 C、 D、
+    for sep in [r'[\.\s、，]+', r'(?=[一-鿿])', r'']:
+        pattern = re.compile(r'([A-E])' + sep + r'(.+?)(?=[A-E](?:[\.\s、，]|[一-鿿])|$)', re.DOTALL)
+        matches = pattern.findall(text)
+        if len(matches) >= 2:  # 至少要有2个选项才算有效
+            for label, content in matches:
+                content = re.sub(r'[；;，,。.]\s*$', '', content).strip()
+                if content and len(content) < 200:
+                    options.append({'label': label, 'text': content})
+            if options:
+                return options
     return options
 
 
